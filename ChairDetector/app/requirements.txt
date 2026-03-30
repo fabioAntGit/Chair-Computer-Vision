@@ -3,3 +3,8 @@ ultralytics # Carrega o nosso modelo YOLOv8 treinado e faz a inferência/deteç�
 pillow # Processa as imagens uploadadas para o formato correto
 pandas # Organiza os resultados das caixas numa tabela visual agradável
 streamlit-webrtc # bué fixe para depois fazer com vídeo da webcam em tempo real e não só com imagens (https://github.com/whitphx/streamlit-webrtc?tab=readme-ov-file)
+tensorboard # Para ver os gráficos do treino
+opencv-python
+matplotlib
+roboflow
+PyYAML
