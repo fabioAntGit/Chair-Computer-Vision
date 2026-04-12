@@ -1,0 +1,51 @@
+{
+  "model_name": "tool-detector",
+  "version": "1.0.0",
+  "task": "object_detection",
+  "framework": "ultralytics-yolo",
+  "weights": {
+    "primary": "models/tool-detector-v1.pt",
+    "onnx": "models/tool-detector-v1.onnx"
+  },
+  "classes": [
+    { "name": "wrench", "aliases": ["spanner"] },
+    { "name": "screwdriver", "aliases": ["driver"] }
+  ],
+  "intended_use": {
+    "summary": "Detect common hand tools on a workbench for inventory/5S checks.",
+    "environment": ["workbench", "indoor"],
+    "out_of_scope": ["detect tool damage", "count tools in closed drawers"]
+  },
+  "data": {
+    "dataset_format": "yolo",
+    "image_count": { "train": 420, "val": 90, "test": 90 },
+    "source": "collected_by_students",
+    "labeling_notes": "Boxes cover visible object extent; partially occluded tools labeled if >30% visible."
+  },
+  "evaluation": {
+    "test_metrics": {
+      "map50": 0.91,
+      "map5095": 0.62,
+      "per_class_ap50": { "wrench": 0.93, "screwdriver": 0.89 }
+    },
+    "recommended_thresholds": { "confidence": 0.35, "nms_iou": 0.60 }
+  },
+  "io": {
+    "input": { "type": "image", "color_space": "RGB" },
+    "output": { "format": "detections_json", "bbox": "xyxy", "score": "confidence" }
+  },
+  "limitations": [
+    "Performance drops on highly reflective metal surfaces with glare.",
+    "Small tools (<40px width) often missed."
+  ],
+  "runtime": {
+    "model_size_mb": 6.2,
+    "latency_ms_cpu": 120,
+    "latency_ms_gpu": 12
+  },
+  "license": {
+    "model": "CC-BY-4.0",
+    "data": "CC-BY-4.0",
+    "notes": "No faces included; no proprietary logos intentionally captured."
+  }
+}
