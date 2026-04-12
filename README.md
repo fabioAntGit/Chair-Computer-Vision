@@ -17,7 +17,7 @@ Esta aplicação demonstra o modelo de IA desenvolvido para a UC de Inteligênci
 
 ### 1. Descarregar o dataset
 ```bash
-python modelos/download_dataset.py
+python treino/download_dataset.py
 ```
 Isto vai descarregar o dataset do Roboflow para a pasta `ChairDetector/IA-8230365-8230196-numero_da_versão/`.
 
@@ -25,8 +25,8 @@ Isto vai descarregar o dataset do Roboflow para a pasta `ChairDetector/IA-823036
 
 ### 2. Treinar o modelo
 ```bash
-python modelos/yolo_model_train.py
+python treino/yolo_model_train.py
 ```
-O treino usa YOLOv8m com 100 épocas e resolução 640px (por enquanto). Os resultados são guardados em `modelos/yolov8/v{n}/` — cada versão tem a sua própria pasta (`v1`, `v2`, ...). Para treinar uma nova versão, altera o parâmetro `name` em `yolo_model_train.py`.
+O treino usa YOLOv8m com 100 épocas e resolução 640px (por enquanto). Os resultados são guardados em `runs/modelos/yolov8/v{n}/` — cada versão tem a sua própria pasta (`v1`, `v2`, ...). Para treinar uma nova versão, altera o parâmetro `name` em `yolo_model_train.py`.
 
 > **Nota:** O parâmetro `device='mps'` está otimizado para Mac com Apple Silicon. Em Windows/Linux mudar para `device='cuda'` (GPU NVIDIA) ou `device='cpu'`.
