@@ -4,8 +4,14 @@ import cv2
 import numpy as np
 from PIL import Image
 import av
+import torch
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 import pandas as pd
+
+# Deteção de hardware disponível
+AVAILABLE_DEVICES = ["cpu"]
+if torch.cuda.is_available(): AVAILABLE_DEVICES.append("cuda")
+if torch.backends.mps.is_available(): AVAILABLE_DEVICES.append("mps")
 
 st.set_page_config(page_title="IA Chair Detector", layout="wide")
 
@@ -30,6 +36,19 @@ model = get_model(MODEL_PATH)
 
 st.sidebar.divider()
 
+st.sidebar.markdown("### Processamento")
+if len(AVAILABLE_DEVICES) > 1:
+    DEVICE = st.sidebar.selectbox(
+        "Hardware",
+        options=AVAILABLE_DEVICES,
+        index=len(AVAILABLE_DEVICES) - 1,
+        format_func=lambda x: "GPU (NVIDIA)" if x == "cuda" else "GPU (Apple Silicon)" if x == "mps" else "CPU"
+    )
+else:
+    DEVICE = "cpu"
+    st.sidebar.write("Hardware: **CPU** (Nenhuma GPU detetada)")
+st.sidebar.divider()
+
 st.sidebar.markdown("### Ajustes do Modelo")
 confianca = st.sidebar.slider("Confiança (Threshold)", min_value=0.0, max_value=1.0, value=0.5,
                                help="Nível mínimo de certeza para mostrar uma deteção.")
@@ -42,7 +61,6 @@ mostrar_scores = st.sidebar.checkbox("Mostrar % de Certeza", value=True)
 
 st.sidebar.divider()
 st.sidebar.info("Projeto IA - 2026\n\nAlunos: 8230365 | 8230196")
-
 
 # Navegação por session_state
 if "page" not in st.session_state:
@@ -69,7 +87,7 @@ if st.session_state.page == "image":
 
         if model:
             with st.spinner("A analisar..."):
-                results = model.predict(image, conf=confianca)
+                results = model.predict(image, conf=confianca, device=DEVICE)
                 # plot() devolve BGR; converter para RGB para o Streamlit
                 res_plotted_rgb = cv2.cvtColor(
                     results[0].plot(labels=mostrar_labels, conf=mostrar_scores),
@@ -103,29 +121,26 @@ else:
     st.markdown("<h1 style='text-align: center;'>Deteção por Webcam</h1>", unsafe_allow_html=True)
 
     if model:
-        # Forçar pedido de permissão da câmara no browser
-        if st.button("Solicitar Acesso à Câmara (Browser)"):
-            st.components.v1.html("""
-                <script>
-                navigator.mediaDevices.getUserMedia({ video: true })
-                    .then(function(stream) {
-                        alert("Acesso concedido! Por favor, faz refresh à página.");
-                        window.parent.location.reload();
-                    })
-                    .catch(function(err) {
-                        alert("Não foi possível aceder à câmara. Verifica as definições do browser ou o ícone do cadeado no URL.");
-                    });
-                </script>
-            """, height=0)
-
         class VideoProcessor:
+            def __init__(self):
+                self.confianca = confianca
+                self.mostrar_labels = mostrar_labels
+                self.mostrar_scores = mostrar_scores
+                self._frame_count = 0
+                self._last_annotated = None  # Cache do último frame anotado
+
             def recv(self, frame):
                 img = frame.to_ndarray(format="bgr24")
-                results = model.predict(img, conf=confianca, verbose=False)
-                annotated_frame = results[0].plot(labels=mostrar_labels, conf=mostrar_scores)
-                return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
+                self._frame_count += 1
 
-        webrtc_streamer(
+                # Correr YOLO apenas em 1 de cada 3 frames para ganhar FPS
+                if self._frame_count % 3 == 0 or self._last_annotated is None:
+                    results = model.predict(img, conf=self.confianca, verbose=False, imgsz=320, device=DEVICE)
+                    self._last_annotated = results[0].plot(labels=self.mostrar_labels, conf=self.mostrar_scores)
+
+                return av.VideoFrame.from_ndarray(self._last_annotated, format="bgr24")
+
+        ctx = webrtc_streamer(
             key="chair-detection",
             mode=WebRtcMode.SENDRECV,
             rtc_configuration=RTCConfiguration(
@@ -135,5 +150,11 @@ else:
             media_stream_constraints={"video": True},
             async_processing=True,
         )
+
+        # Atualizar parâmetros em tempo real sem reiniciar a stream
+        if ctx.video_processor:
+            ctx.video_processor.confianca = confianca
+            ctx.video_processor.mostrar_labels = mostrar_labels
+            ctx.video_processor.mostrar_scores = mostrar_scores
     else:
         st.error("Modelo não carregado.")
