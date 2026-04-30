@@ -9,4 +9,4 @@ api_key = os.getenv("ROBOFLOW_API_KEY")
 rf = roboflow.Roboflow(api_key)
 
 project = rf.workspace("8230365-8230196").project("ia-8230365-8230196")
-dataset = project.version(7).download("yolov8")
+dataset = project.version(10).download("yolov8")

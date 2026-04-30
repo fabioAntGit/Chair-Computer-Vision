@@ -66,12 +66,12 @@ st.sidebar.info("Projeto IA - 2026\n\nAlunos: 8230365 | 8230196")
 if "page" not in st.session_state:
     st.session_state.page = "image"
 
-col_nav1, col_nav2 = st.columns(2)
+_, col_nav1, col_nav2, _ = st.columns([2, 1, 1, 2])
 with col_nav1:
-    if st.button("🖼️ Imagem Estática"):
+    if st.button("Imagem Estática", use_container_width=True):
         st.session_state.page = "image"
 with col_nav2:
-    if st.button("📷 Câmara em Tempo Real"):
+    if st.button("Webcam", use_container_width=True):
         st.session_state.page = "webcam"
 
 st.divider()
@@ -108,7 +108,7 @@ if st.session_state.page == "image":
                         detected_names = [names[int(c)] for c in classes]
                         df_counts = pd.Series(detected_names).value_counts().reset_index()
                         df_counts.columns = ['Peça', 'Qtd']
-                        st.dataframe(df_counts, hide_index=True, use_container_width=True)
+                        st.dataframe(df_counts, hide_index=True, width='stretch')
                         st.markdown(f"**Total detetado:** {len(classes)}")
                     else:
                         st.warning("Nenhuma peça detetada.")
