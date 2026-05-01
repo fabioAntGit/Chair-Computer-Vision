@@ -9,6 +9,14 @@ from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 import pandas as pd
 import json
 from datetime import datetime
+import io
+
+def img_para_bytes(img_rgb: np.ndarray) -> bytes:
+    """Converte um array RGB (numpy) para bytes PNG prontos para download."""
+    pil_img = Image.fromarray(img_rgb)
+    buf = io.BytesIO()
+    pil_img.save(buf, format="PNG")
+    return buf.getvalue()
 
 # Deteção de hardware disponível
 AVAILABLE_DEVICES = ["cpu"]
@@ -162,6 +170,14 @@ if st.session_state.page == "image":
                         file_name="detecoes.json",
                         mime="application/json",
                         use_container_width=True,
+                    )
+                    st.download_button(
+                        label="Descarregar Imagem",
+                        data=img_para_bytes(res_plotted_rgb),
+                        file_name=f"detecao_{modelo_ver}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                        mime="image/png",
+                        use_container_width=True,
+                        key="dl_img_static",
                     )
 
                     # ─── Guardar no Histórico (1x por ficheiro) ───
@@ -369,6 +385,25 @@ elif st.session_state.page == "compare":
                 file_name="comparacao_modelos.json",
                 mime="application/json",
             )
+            col_dl_m, col_dl_l = st.columns(2)
+            with col_dl_m:
+                st.download_button(
+                    label="Descarregar Imagem YOLOv8m",
+                    data=img_para_bytes(img_m_rgb),
+                    file_name=f"detecao_YOLOv8m_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="dl_img_cmp_m",
+                )
+            with col_dl_l:
+                st.download_button(
+                    label="Descarregar Imagem YOLOv8l",
+                    data=img_para_bytes(img_l_rgb),
+                    file_name=f"detecao_YOLOv8l_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="dl_img_cmp_l",
+                )
 
             # ── Guardar no Histórico (1x por ficheiro) ──
             hist_key_cmp = f"cmp_{uploaded_cmp.file_id}"
@@ -449,5 +484,13 @@ if st.session_state.page == "historico":
                         mime="application/json",
                         use_container_width=True,
                         key=f"dl_hist_{idx}",
+                    )
+                    st.download_button(
+                        label="Descarregar Imagem",
+                        data=img_para_bytes(entry["imagem"]),
+                        file_name=f"historico_{idx+1}_{entry['modelo']}_{entry['timestamp'][:10]}.png",
+                        mime="image/png",
+                        use_container_width=True,
+                        key=f"dl_img_hist_{idx}",
                     )
                     st.divider()
