@@ -384,6 +384,7 @@ elif st.session_state.page == "compare":
                 data=json.dumps(export_cmp, indent=2, ensure_ascii=False),
                 file_name="comparacao_modelos.json",
                 mime="application/json",
+                use_container_width=True,
             )
             col_dl_m, col_dl_l = st.columns(2)
             with col_dl_m:
