@@ -10,6 +10,7 @@ import pandas as pd
 import json
 from datetime import datetime
 import io
+import time
 
 def img_para_bytes(img_rgb: np.ndarray) -> bytes:
     """Converte um array RGB (numpy) para bytes PNG prontos para download."""
@@ -112,7 +113,9 @@ if st.session_state.page == "image":
 
         if model:
             with st.spinner("A analisar..."):
+                t0 = time.perf_counter()
                 results = model.predict(image, conf=confianca, device=DEVICE)
+                tempo_inferencia_ms = (time.perf_counter() - t0) * 1000
                 # plot() devolve BGR; converter para RGB para o Streamlit
                 res_plotted_rgb = cv2.cvtColor(
                     results[0].plot(labels=mostrar_labels, conf=mostrar_scores),
@@ -153,6 +156,7 @@ if st.session_state.page == "image":
                         detections = []
                         confs = []
                         st.warning("Nenhuma deteção.")
+                    st.metric("Tempo de Inferência", f"{tempo_inferencia_ms:.1f} ms")
 
                     # ─── Exportar JSON (sempre visível) ───
                     export_data = {
@@ -300,8 +304,13 @@ elif st.session_state.page == "compare":
 
         if model_m and model_l:
             with st.spinner("A correr ambos os modelos..."):
+                t0_m = time.perf_counter()
                 res_m = model_m.predict(img_cmp, conf=confianca, device=DEVICE)
+                tempo_m_ms = (time.perf_counter() - t0_m) * 1000
+
+                t0_l = time.perf_counter()
                 res_l = model_l.predict(img_cmp, conf=confianca, device=DEVICE)
+                tempo_l_ms = (time.perf_counter() - t0_l) * 1000
 
             img_m_rgb = cv2.cvtColor(
                 res_m[0].plot(labels=mostrar_labels, conf=mostrar_scores), cv2.COLOR_BGR2RGB
@@ -340,6 +349,7 @@ elif st.session_state.page == "compare":
                 else:
                     detections_m = []
                     st.warning("Nenhuma deteção.")
+                st.metric("Tempo de Inferência", f"{tempo_m_ms:.1f} ms")
 
             # ── YOLOv8l ──
             with col_l:
@@ -369,6 +379,7 @@ elif st.session_state.page == "compare":
                 else:
                     detections_l = []
                     st.warning("Nenhuma deteção.")
+                st.metric("Tempo de Inferência", f"{tempo_l_ms:.1f} ms")
 
             # ── Exportar JSON combinado ──
             st.divider()
