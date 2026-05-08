@@ -9,3 +9,4 @@ matplotlib
 roboflow
 PyYAML
 python-dotenv
+tornado
