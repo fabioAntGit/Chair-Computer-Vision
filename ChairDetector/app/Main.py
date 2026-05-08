@@ -46,7 +46,7 @@ AVAILABLE_MODELS: list[str] = list(ALL_MODEL_PATHS.keys())
 # Limiares de confiança ótimos (F1) por modelo
 MODEL_F1_THRESHOLDS: dict[str, float] = {
     "yolov8m": 0.59,
-    "yolov8n": 0.25,
+    "yolov8n": 0.26,
     "yolov11s": 0.42,
 }
 
@@ -159,7 +159,7 @@ if st.session_state.prev_modelo != modelo_ver:
     st.session_state.prev_modelo = modelo_ver
     st.session_state.slider_conf = default_conf
 
-confianca = st.sidebar.slider("Confiança (Threshold)", min_value=0.0, max_value=1.0, value=default_conf,
+confianca = st.sidebar.slider("Confiança (Threshold)", min_value=0.0, max_value=1.0, 
                                help=f"Nível mínimo de certeza para mostrar uma deteção. (Limiar F1 ótimo do modelo: {default_conf})",
                                key="slider_conf")
 
