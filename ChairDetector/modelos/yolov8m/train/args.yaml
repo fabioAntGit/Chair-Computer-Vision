@@ -1,11 +1,11 @@
 task: detect
 mode: train
 model: yolov8m.pt
-data: IA-8230365-8230196-10/data.yaml
+data: IA-8230365-8230196-13/data.yaml
 epochs: 300
 time: null
 patience: 50
-batch: 16
+batch: 8
 imgsz: 640
 save: true
 save_period: -1
@@ -13,7 +13,7 @@ cache: false
 device: '0'
 workers: 8
 project: runs/train
-name: foe-bot-exp1-2
+name: foe-bot-exp1
 exist_ok: false
 pretrained: true
 optimizer: auto
@@ -107,4 +107,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: botsort.yaml
-save_dir: /content/runs/detect/runs/train/foe-bot-exp1-2
+save_dir: /content/runs/detect/runs/train/foe-bot-exp1
