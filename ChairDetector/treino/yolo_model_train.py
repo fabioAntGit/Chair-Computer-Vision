@@ -10,25 +10,25 @@ model = YOLO("yolov8m.pt")  # Load the pre-trained model weights
 results = model.train(
 
     # ── Dataset ──────────────────────────────────────────────────────────────
-    data='IA-8230365-8230196-7/data.yaml',  # Path to the dataset config file (YAML).
+    data='IA-8230365-8230196-11/data.yaml',  # Path to the dataset config file (YAML).
                                   # Must contain train/val/test paths and class names.
 
     # ── Core training settings ────────────────────────────────────────────────
-    epochs=150,         # Total number of training epochs.
+    epochs=300,         # Total number of training epochs.
                         # More epochs = more learning, but risk of overfitting.
                         # Typical range: 50–300.
 
     patience=50,        # Early stopping: halt training if no improvement is seen
                         # for this many epochs. Set to 0 to disable.
 
-    batch=16,           # Number of images per training batch.
+    batch=8,           # Number of images per training batch.
                         # Higher = faster but needs more VRAM. Use -1 for AutoBatch.
 
     imgsz=640,          # Input image size (pixels). Images are resized to this square.
                         # Common values: 416, 512, 640, 1280.
 
     # ── Hardware ──────────────────────────────────────────────────────────────
-    device="cpu",       # Device to train on.
+    device=0,       # Device to train on.
                         # "cpu"       → CPU only (slow)
                         # 0           → first CUDA GPU
                         # [0, 1]      → multi-GPU (CUDA)
