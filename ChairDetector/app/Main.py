@@ -11,15 +11,15 @@ import json
 from datetime import datetime
 import io
 import time
+from pathlib import Path
 
+@st.cache_data
 def img_para_bytes(img_rgb: np.ndarray) -> bytes:
-    """Converte um array RGB (numpy) para bytes PNG prontos para download."""
     pil_img = Image.fromarray(img_rgb)
     buf = io.BytesIO()
     pil_img.save(buf, format="PNG")
     return buf.getvalue()
 
-# Deteção de hardware disponível
 AVAILABLE_DEVICES = ["cpu"]
 if torch.cuda.is_available(): AVAILABLE_DEVICES.append("cuda")
 if torch.backends.mps.is_available(): AVAILABLE_DEVICES.append("mps")
@@ -27,29 +27,105 @@ if torch.backends.mps.is_available(): AVAILABLE_DEVICES.append("mps")
 st.set_page_config(page_title="IA Chair Detector", layout="wide")
 
 
-@st.cache_resource
-def get_model(path):
-    try:
-        return YOLO(path)
-    except Exception:
-        st.error(f"Erro ao carregar o modelo em {path}. Verifica se os pesos existem!")
-        return None
+MODELS_DIR = Path("modelos")
 
 
-# Pré-carregar ambos os modelos (sempre em cache)
-model_m = get_model("modelos/yolov8m/weights/best.pt")
-model_l = get_model("modelos/yolov8l/weights/best.pt")
+@st.cache_data
+def discover_models() -> dict[str, str]:
+    found: dict[str, str] = {}
+    if not MODELS_DIR.is_dir():
+        return found
+    for pt_file in sorted(MODELS_DIR.glob("*/weights/best.pt")):
+        found[pt_file.parts[-3]] = str(pt_file)
+    return found
 
-# Sidebar
+
+ALL_MODEL_PATHS: dict[str, str] = discover_models()
+AVAILABLE_MODELS: list[str] = list(ALL_MODEL_PATHS.keys())
+
+
+def load_model(nome: str):
+    key = f"model_{nome}"
+    if key not in st.session_state or st.session_state[key] is None:
+        path = ALL_MODEL_PATHS.get(nome)
+        if path is None:
+            st.error(f"Modelo `{nome}` não encontrado no diretório de modelos.")
+            return None
+        with st.spinner(f"A carregar modelo `{nome}`..."):
+            try:
+                st.session_state[key] = YOLO(path)
+            except Exception:
+                st.session_state[key] = None
+                st.error(f"Erro ao carregar o modelo `{nome}`.")
+    return st.session_state[key]
+
+
+def _build_detections(r) -> list[dict]:
+    names = r.names
+    return [
+        {
+            "classe": names[int(cls)],
+            "confianca": round(float(cf), 4),
+            "bbox_xyxy": {
+                "x1": round(float(b[0]), 2), "y1": round(float(b[1]), 2),
+                "x2": round(float(b[2]), 2), "y2": round(float(b[3]), 2),
+            },
+        }
+        for cls, cf, b in zip(r.boxes.cls.tolist(), r.boxes.conf.tolist(), r.boxes.xyxy.tolist())
+    ]
+
+
+def run_inference(mdl, image, conf: float, device: str, show_labels: bool, show_scores: bool) -> dict:
+    t0 = time.perf_counter()
+    results = mdl.predict(image, conf=conf, device=device)
+    tempo_ms = (time.perf_counter() - t0) * 1000
+
+    img_rgb = cv2.cvtColor(
+        results[0].plot(labels=show_labels, conf=show_scores), cv2.COLOR_BGR2RGB
+    )
+    boxes = results[0].boxes
+    detections = _build_detections(results[0]) if len(boxes) > 0 else []
+
+    return {
+        "img_rgb": img_rgb,
+        "tempo_ms": tempo_ms,
+        "detections": detections,
+        "confs": boxes.conf.tolist(),
+        "n_boxes": len(boxes),
+    }
+
+
+def render_model_col(nome: str, data: dict, *, show_image: bool = True) -> None:
+    st.markdown(f"### {nome}")
+    if show_image:
+        st.image(data["img_rgb"], use_container_width=True)
+
+    if data["n_boxes"] > 0:
+        df = pd.Series([d["classe"] for d in data["detections"]]).value_counts().reset_index()
+        df.columns = ["Peça", "Qtd"]
+        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.caption(
+            f"Total: **{data['n_boxes']}** | "
+            f"Conf. média: **{sum(data['confs']) / len(data['confs']):.2%}**"
+        )
+    else:
+        st.warning("Nenhuma deteção.")
+
+    st.metric("Tempo de Inferência", f"{data['tempo_ms']:.1f} ms")
+
+
 st.sidebar.title("Configurações")
 
 st.sidebar.markdown("### Seleção do Modelo")
-modelo_ver = st.sidebar.selectbox("Escolha o Modelo", options=["YOLOv8m", "YOLOv8l"], index=0,
-                                  disabled=st.session_state.get("page") == "compare",
-                                  help="Desativado na página de Comparação (ambos os modelos são usados).")
+if not AVAILABLE_MODELS:
+    st.sidebar.error("Nenhum modelo .pt encontrado em `modelos/*/weights/best.pt`.")
+    st.stop()
 
-MODEL_PATH = "modelos/yolov8m/weights/best.pt" if modelo_ver == "YOLOv8m" else "modelos/yolov8l/weights/best.pt"
-model = model_m if modelo_ver == "YOLOv8m" else model_l
+modelo_ver = st.sidebar.selectbox("Escolha o Modelo", options=AVAILABLE_MODELS, index=0,
+                                  disabled=st.session_state.get("page") == "compare",
+                                  help="Desativado na página de Comparação (os dois modelos são escolhidos lá).")
+
+model = load_model(modelo_ver)
 
 st.sidebar.divider()
 
@@ -76,10 +152,6 @@ st.sidebar.markdown("### Interface Visual")
 mostrar_labels = st.sidebar.checkbox("Mostrar Nome da Peça", value=True)
 mostrar_scores = st.sidebar.checkbox("Mostrar % de Certeza", value=True)
 
-st.sidebar.divider()
-st.sidebar.info("Projeto IA - 2026\n\nAlunos: 8230365 | 8230196")
-
-# Navegação por session_state
 if "page" not in st.session_state:
     st.session_state.page = "image"
 if "historico" not in st.session_state:
@@ -113,57 +185,23 @@ if st.session_state.page == "image":
 
         if model:
             with st.spinner("A analisar..."):
-                t0 = time.perf_counter()
-                results = model.predict(image, conf=confianca, device=DEVICE)
-                tempo_inferencia_ms = (time.perf_counter() - t0) * 1000
-                # plot() devolve BGR; converter para RGB para o Streamlit
-                res_plotted_rgb = cv2.cvtColor(
-                    results[0].plot(labels=mostrar_labels, conf=mostrar_scores),
-                    cv2.COLOR_BGR2RGB
-                )
+                data = run_inference(model, image, confianca, DEVICE, mostrar_labels, mostrar_scores)
 
                 col_res, col_stats = st.columns([2, 1])
 
                 with col_res:
                     st.markdown("### Resultado da Deteção")
-                    st.image(res_plotted_rgb, width=350)
+                    st.image(data["img_rgb"], width=350)
 
                 with col_stats:
-                    st.markdown("### Estatísticas")
-                    boxes = results[0].boxes
-                    names = results[0].names
-                    if len(boxes) > 0:
-                        classes = boxes.cls.tolist()
-                        confs   = boxes.conf.tolist()
-                        bboxes  = boxes.xyxy.tolist()
-                        detected_names = [names[int(c)] for c in classes]
-                        df_counts = pd.Series(detected_names).value_counts().reset_index()
-                        df_counts.columns = ['Peça', 'Qtd']
-                        st.dataframe(df_counts, hide_index=True, use_container_width=True)
-                        st.caption(f"Total: **{len(classes)}** | Conf. média: **{sum(confs)/len(confs):.2%}**")
-                        detections = [
-                            {
-                                "classe": names[int(cls)],
-                                "confianca": round(float(conf), 4),
-                                "bbox_xyxy": {
-                                    "x1": round(float(bbox[0]), 2), "y1": round(float(bbox[1]), 2),
-                                    "x2": round(float(bbox[2]), 2), "y2": round(float(bbox[3]), 2),
-                                },
-                            }
-                            for cls, conf, bbox in zip(classes, confs, bboxes)
-                        ]
-                    else:
-                        detections = []
-                        confs = []
-                        st.warning("Nenhuma deteção.")
-                    st.metric("Tempo de Inferência", f"{tempo_inferencia_ms:.1f} ms")
+                    render_model_col(modelo_ver, data, show_image=False)
 
                     # ─── Exportar JSON (sempre visível) ───
                     export_data = {
                         "threshold_confianca": confianca,
                         modelo_ver: {
-                            "total_detetado": len(detections),
-                            "detecoes": detections,
+                            "total_detetado": len(data["detections"]),
+                            "detecoes": data["detections"],
                         },
                     }
                     with st.expander("Pré-visualizar JSON"):
@@ -177,7 +215,7 @@ if st.session_state.page == "image":
                     )
                     st.download_button(
                         label="Descarregar Imagem",
-                        data=img_para_bytes(res_plotted_rgb),
+                        data=img_para_bytes(data["img_rgb"]),
                         file_name=f"detecao_{modelo_ver}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
                         mime="image/png",
                         use_container_width=True,
@@ -188,14 +226,14 @@ if st.session_state.page == "image":
                     hist_key = f"img_{uploaded_file.file_id}_{modelo_ver}"
                     if hist_key not in st.session_state:
                         st.session_state[hist_key] = True
-                        conf_media = sum(confs) / len(confs) if confs else 0.0
+                        conf_media = sum(data["confs"]) / len(data["confs"]) if data["confs"] else 0.0
                         st.session_state.historico.append({
-                            "imagem": res_plotted_rgb,
+                            "imagem": data["img_rgb"],
                             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             "modelo": modelo_ver,
-                            "total": len(detections),
+                            "total": len(data["detections"]),
                             "conf_media": conf_media,
-                            "detecoes": detections,
+                            "detecoes": data["detections"],
                             "fonte": "Imagem Estática",
                         })
         else:
@@ -214,7 +252,7 @@ elif st.session_state.page == "webcam":
                 self.mostrar_scores = mostrar_scores
                 self._frame_count = 0
                 self._last_annotated = None  # Cache do último frame anotado
-                self.last_detections = []    # Última lista de deteções para exportar
+                self.last_detections = []
 
             def recv(self, frame):
                 img = frame.to_ndarray(format="bgr24")
@@ -226,25 +264,7 @@ elif st.session_state.page == "webcam":
                     r = results[0]
                     self._last_annotated = r.plot(labels=self.mostrar_labels, conf=self.mostrar_scores)
 
-                    # Guardar deteções do frame atual
-                    names = r.names
-                    self.last_detections = [
-                        {
-                            "classe": names[int(cls)],
-                            "confianca": round(float(conf), 4),
-                            "bbox_xyxy": {
-                                "x1": round(float(bbox[0]), 2),
-                                "y1": round(float(bbox[1]), 2),
-                                "x2": round(float(bbox[2]), 2),
-                                "y2": round(float(bbox[3]), 2),
-                            },
-                        }
-                        for cls, conf, bbox in zip(
-                            r.boxes.cls.tolist(),
-                            r.boxes.conf.tolist(),
-                            r.boxes.xyxy.tolist(),
-                        )
-                    ]
+                    self.last_detections = _build_detections(r)
 
                 return av.VideoFrame.from_ndarray(self._last_annotated, format="bgr24")
 
@@ -259,7 +279,6 @@ elif st.session_state.page == "webcam":
             async_processing=True,
         )
 
-        # Atualizar parâmetros em tempo real sem reiniciar a stream
         if ctx.video_processor:
             ctx.video_processor.confianca = confianca
             ctx.video_processor.mostrar_labels = mostrar_labels
@@ -295,98 +314,44 @@ elif st.session_state.page == "webcam":
 # ─── PÁGINA: COMPARAÇÃO ───
 elif st.session_state.page == "compare":
     st.markdown("<h1 style='text-align: center;'>Comparação de Modelos</h1>", unsafe_allow_html=True)
-    st.caption("Corre ambos os modelos (YOLOv8m e YOLOv8l) na mesma imagem e compara os resultados lado a lado.")
+    st.caption("Escolhe dois modelos para comparar os resultados lado a lado na mesma imagem.")
+
+    col_sel_a, col_sel_b = st.columns(2)
+    with col_sel_a:
+        modelo_a = st.selectbox("Modelo A", options=AVAILABLE_MODELS, index=0, key="cmp_modelo_a")
+    with col_sel_b:
+        # Índice por defeito: segundo modelo disponível (evitar duplicado)
+        default_b = 1 if len(AVAILABLE_MODELS) > 1 else 0
+        modelo_b = st.selectbox("Modelo B", options=AVAILABLE_MODELS, index=default_b, key="cmp_modelo_b")
+
+    if modelo_a == modelo_b:
+        st.warning("Seleciona dois modelos diferentes para comparar.")
 
     uploaded_cmp = st.file_uploader("Escolhe uma imagem...", type=["jpg", "jpeg", "png"], key="cmp_upload")
 
-    if uploaded_cmp is not None:
+    if uploaded_cmp is not None and modelo_a != modelo_b:
         img_cmp = Image.open(uploaded_cmp)
 
-        if model_m and model_l:
-            with st.spinner("A correr ambos os modelos..."):
-                t0_m = time.perf_counter()
-                res_m = model_m.predict(img_cmp, conf=confianca, device=DEVICE)
-                tempo_m_ms = (time.perf_counter() - t0_m) * 1000
+        mdl_a = load_model(modelo_a)
+        mdl_b = load_model(modelo_b)
 
-                t0_l = time.perf_counter()
-                res_l = model_l.predict(img_cmp, conf=confianca, device=DEVICE)
-                tempo_l_ms = (time.perf_counter() - t0_l) * 1000
+        if mdl_a and mdl_b:
+            with st.spinner(f"A correr {modelo_a} e {modelo_b}..."):
+                data_a = run_inference(mdl_a, img_cmp, confianca, DEVICE, mostrar_labels, mostrar_scores)
+                data_b = run_inference(mdl_b, img_cmp, confianca, DEVICE, mostrar_labels, mostrar_scores)
 
-            img_m_rgb = cv2.cvtColor(
-                res_m[0].plot(labels=mostrar_labels, conf=mostrar_scores), cv2.COLOR_BGR2RGB
-            )
-            img_l_rgb = cv2.cvtColor(
-                res_l[0].plot(labels=mostrar_labels, conf=mostrar_scores), cv2.COLOR_BGR2RGB
-            )
-
-            col_m, col_l = st.columns(2)
-
-            # ── YOLOv8m ──
-            with col_m:
-                st.markdown("### YOLOv8m")
-                st.image(img_m_rgb, use_container_width=True)
-
-                boxes_m = res_m[0].boxes
-                names_m = res_m[0].names
-                if len(boxes_m) > 0:
-                    classes_m   = boxes_m.cls.tolist()
-                    confs_m     = boxes_m.conf.tolist()
-                    bboxes_m    = boxes_m.xyxy.tolist()
-                    det_names_m = [names_m[int(c)] for c in classes_m]
-                    df_m = pd.Series(det_names_m).value_counts().reset_index()
-                    df_m.columns = ["Peça", "Qtd"]
-                    st.dataframe(df_m, hide_index=True, use_container_width=True)
-                    st.caption(f"Total: **{len(classes_m)}** | Conf. média: **{sum(confs_m)/len(confs_m):.2%}**")
-                    detections_m = [
-                        {
-                            "classe": names_m[int(cls)],
-                            "confianca": round(float(conf), 4),
-                            "bbox_xyxy": {"x1": round(float(b[0]),2), "y1": round(float(b[1]),2),
-                                          "x2": round(float(b[2]),2), "y2": round(float(b[3]),2)},
-                        }
-                        for cls, conf, b in zip(classes_m, confs_m, bboxes_m)
-                    ]
-                else:
-                    detections_m = []
-                    st.warning("Nenhuma deteção.")
-                st.metric("Tempo de Inferência", f"{tempo_m_ms:.1f} ms")
-
-            # ── YOLOv8l ──
-            with col_l:
-                st.markdown("### YOLOv8l")
-                st.image(img_l_rgb, use_container_width=True)
-
-                boxes_l = res_l[0].boxes
-                names_l = res_l[0].names
-                if len(boxes_l) > 0:
-                    classes_l   = boxes_l.cls.tolist()
-                    confs_l     = boxes_l.conf.tolist()
-                    bboxes_l    = boxes_l.xyxy.tolist()
-                    det_names_l = [names_l[int(c)] for c in classes_l]
-                    df_l = pd.Series(det_names_l).value_counts().reset_index()
-                    df_l.columns = ["Peça", "Qtd"]
-                    st.dataframe(df_l, hide_index=True, use_container_width=True)
-                    st.caption(f"Total: **{len(classes_l)}** | Conf. média: **{sum(confs_l)/len(confs_l):.2%}**")
-                    detections_l = [
-                        {
-                            "classe": names_l[int(cls)],
-                            "confianca": round(float(conf), 4),
-                            "bbox_xyxy": {"x1": round(float(b[0]),2), "y1": round(float(b[1]),2),
-                                          "x2": round(float(b[2]),2), "y2": round(float(b[3]),2)},
-                        }
-                        for cls, conf, b in zip(classes_l, confs_l, bboxes_l)
-                    ]
-                else:
-                    detections_l = []
-                    st.warning("Nenhuma deteção.")
-                st.metric("Tempo de Inferência", f"{tempo_l_ms:.1f} ms")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                render_model_col(modelo_a, data_a)
+            with col_b:
+                render_model_col(modelo_b, data_b)
 
             # ── Exportar JSON combinado ──
             st.divider()
             export_cmp = {
                 "threshold_confianca": confianca,
-                "YOLOv8m": {"total_detetado": len(detections_m), "detecoes": detections_m},
-                "YOLOv8l": {"total_detetado": len(detections_l), "detecoes": detections_l},
+                modelo_a: {"total_detetado": len(data_a["detections"]), "detecoes": data_a["detections"]},
+                modelo_b: {"total_detetado": len(data_b["detections"]), "detecoes": data_b["detections"]},
             }
             with st.expander("Pré-visualizar JSON comparativo"):
                 st.json(export_cmp)
@@ -397,46 +362,44 @@ elif st.session_state.page == "compare":
                 mime="application/json",
                 use_container_width=True,
             )
-            col_dl_m, col_dl_l = st.columns(2)
-            with col_dl_m:
+
+            col_dl_a, col_dl_b = st.columns(2)
+            with col_dl_a:
                 st.download_button(
-                    label="Descarregar Imagem YOLOv8m",
-                    data=img_para_bytes(img_m_rgb),
-                    file_name=f"detecao_YOLOv8m_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                    label=f"Descarregar Imagem {modelo_a}",
+                    data=img_para_bytes(data_a["img_rgb"]),
+                    file_name=f"detecao_{modelo_a}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
                     mime="image/png",
                     use_container_width=True,
-                    key="dl_img_cmp_m",
+                    key="dl_img_cmp_a",
                 )
-            with col_dl_l:
+            with col_dl_b:
                 st.download_button(
-                    label="Descarregar Imagem YOLOv8l",
-                    data=img_para_bytes(img_l_rgb),
-                    file_name=f"detecao_YOLOv8l_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
+                    label=f"Descarregar Imagem {modelo_b}",
+                    data=img_para_bytes(data_b["img_rgb"]),
+                    file_name=f"detecao_{modelo_b}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
                     mime="image/png",
                     use_container_width=True,
-                    key="dl_img_cmp_l",
+                    key="dl_img_cmp_b",
                 )
 
             # ── Guardar no Histórico (1x por ficheiro) ──
-            hist_key_cmp = f"cmp_{uploaded_cmp.file_id}"
+            hist_key_cmp = f"cmp_{uploaded_cmp.file_id}_{modelo_a}_{modelo_b}"
             if hist_key_cmp not in st.session_state:
                 st.session_state[hist_key_cmp] = True
                 ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                for img_rgb, modelo_nome, dets, confs_list in [
-                    (img_m_rgb, "YOLOv8m", detections_m, confs_m if len(boxes_m) > 0 else []),
-                    (img_l_rgb, "YOLOv8l", detections_l, confs_l if len(boxes_l) > 0 else []),
-                ]:
+                for nome, data in [(modelo_a, data_a), (modelo_b, data_b)]:
                     st.session_state.historico.append({
-                        "imagem": img_rgb,
+                        "imagem": data["img_rgb"],
                         "timestamp": ts,
-                        "modelo": modelo_nome,
-                        "total": len(dets),
-                        "conf_media": sum(confs_list) / len(confs_list) if confs_list else 0.0,
-                        "detecoes": dets,
+                        "modelo": nome,
+                        "total": len(data["detections"]),
+                        "conf_media": sum(data["confs"]) / len(data["confs"]) if data["confs"] else 0.0,
+                        "detecoes": data["detections"],
                         "fonte": "Comparação",
                     })
         else:
-            st.error("Um ou ambos os modelos não foram carregados.")
+            st.error("Erro ao carregar um ou ambos os modelos selecionados.")
 
 
 # ─── PÁGINA: HISTÓRICO ───
@@ -454,7 +417,6 @@ if st.session_state.page == "historico":
         st.caption(f"{len(hist)} inferência(s) guardada(s)")
         st.divider()
 
-        # Grid de 3 colunas
         COLS = 3
         for row_start in range(0, len(hist), COLS):
             cols = st.columns(COLS)

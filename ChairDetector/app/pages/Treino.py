@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 st.title("Resultados de Treino")
-st.caption("Métricas, curvas de aprendizagem e imagens de validação para cada modelo YOLOv8 treinado.")
+st.caption("Métricas, curvas de aprendizagem e imagens de validação para cada modelo treinado.")
 
 st.divider()
 
