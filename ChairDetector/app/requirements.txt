@@ -1,3 +1,6 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch
+torchvision
 streamlit # Cria a interface web da nossa aplicação
 ultralytics # Carrega o nosso modelo YOLO treinado e faz a inferência/deteções
 pillow # Processa as imagens uploadadas para o formato correto

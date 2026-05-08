@@ -47,7 +47,7 @@ AVAILABLE_MODELS: list[str] = list(ALL_MODEL_PATHS.keys())
 MODEL_F1_THRESHOLDS: dict[str, float] = {
     "yolov8m": 0.59,
     "yolov8n": 0.25,
-    "yolo11s": 0.42,
+    "yolov11s": 0.42,
 }
 
 
@@ -84,7 +84,7 @@ def _build_detections(r) -> list[dict]:
 
 def run_inference(mdl, image, conf: float, device: str, show_labels: bool, show_scores: bool) -> dict:
     t0 = time.perf_counter()
-    results = mdl.predict(image, conf=conf, device=device)
+    results = mdl.predict(image, conf=conf, device=device, verbose=False)
     tempo_ms = (time.perf_counter() - t0) * 1000
 
     img_rgb = cv2.cvtColor(
@@ -105,12 +105,12 @@ def run_inference(mdl, image, conf: float, device: str, show_labels: bool, show_
 def render_model_col(nome: str, data: dict, *, show_image: bool = True) -> None:
     st.markdown(f"### {nome}")
     if show_image:
-        st.image(data["img_rgb"], use_container_width=True)
+        st.image(data["img_rgb"], width="stretch")
 
     if data["n_boxes"] > 0:
         df = pd.Series([d["classe"] for d in data["detections"]]).value_counts().reset_index()
         df.columns = ["Peça", "Qtd"]
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.dataframe(df, hide_index=True, width="stretch")
         st.caption(
             f"Total: **{data['n_boxes']}** | "
             f"Conf. média: **{sum(data['confs']) / len(data['confs']):.2%}**"
@@ -440,7 +440,7 @@ if st.session_state.page == "historico":
             for col_idx, entry in enumerate(hist[row_start:row_start + COLS]):
                 idx = row_start + col_idx
                 with cols[col_idx]:
-                    st.image(entry["imagem"], use_container_width=True)
+                    st.image(entry["imagem"], width="stretch")
 
                     st.markdown(
                         f"**Modelo:** `{entry['modelo']}`  \n"
