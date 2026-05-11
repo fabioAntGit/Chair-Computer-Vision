@@ -12,6 +12,7 @@ from datetime import datetime
 import io
 import time
 from pathlib import Path
+from collections import Counter
 
 @st.cache_data
 def img_para_bytes(img_rgb: np.ndarray) -> bytes:
@@ -49,6 +50,131 @@ MODEL_F1_THRESHOLDS: dict[str, float] = {
     "yolov8n": 0.26,
     "yolov11s": 0.42,
 }
+
+# ─── PERFIS DE COMPLETUDE ───
+
+CHAIR_PROFILES: dict[str, list[dict]] = {
+    "dining chair": [
+        {
+            "nome": "Dining Chair (sem braços)",
+            "requisitos": {
+                "chair backrest": 1,
+                "chair seat": 1,
+                "dining chair leg": 4,
+            },
+        },
+        {
+            "nome": "Dining Chair (com braços)",
+            "requisitos": {
+                "chair backrest": 1,
+                "chair seat": 1,
+                "dining chair leg": 4,
+                "chair armrest": 2,
+            },
+        },
+    ],
+    "office chair": [
+        {
+            "nome": "Office Chair",
+            "requisitos": {
+                "chair backrest": 1,
+                "chair seat": 1,
+                "chair armrest": 2,
+                "office chair leg": 5,
+                "chair wheel": 5,
+            },
+        },
+    ],
+}
+
+
+def verificar_completude(detections: list[dict]) -> dict:
+    """
+    Analisa as deteções e devolve o estado de completude da cadeira.
+
+    Retorna:
+        {
+            "tipo_cadeira": str | None,
+            "perfil_match": str | None,
+            "completa": bool,
+            "contagem": dict[str, int],
+            "pecas_em_falta": dict[str, int],   # peça → quantas faltam
+            "pecas_extra": dict[str, int],       # peça → quantas a mais
+        }
+    """
+    contagem = Counter(d["classe"] for d in detections)
+
+    # Determinar tipo de cadeira detetada
+    tipo = None
+    if contagem.get("office chair", 0) > 0:
+        tipo = "office chair"
+    elif contagem.get("dining chair", 0) > 0:
+        tipo = "dining chair"
+
+    if tipo is None:
+        return {
+            "tipo_cadeira": None,
+            "perfil_match": None,
+            "completa": False,
+            "contagem": dict(contagem),
+            "pecas_em_falta": {},
+            "pecas_extra": {},
+        }
+
+    perfis = CHAIR_PROFILES[tipo]
+
+    # Testar cada perfil e escolher o melhor match
+    melhor = None
+    melhor_score = -1  # quanto maior, melhor (menos faltas)
+
+    for perfil in perfis:
+        reqs = perfil["requisitos"]
+        em_falta = {}
+        extra = {}
+
+        for peca, qtd_min in reqs.items():
+            tem = contagem.get(peca, 0)
+            if tem < qtd_min:
+                em_falta[peca] = qtd_min - tem
+            elif tem > qtd_min:
+                extra[peca] = tem - qtd_min
+
+        # Score: total de peças em falta (0 = perfeito)
+        score = -sum(em_falta.values())
+        if score > melhor_score:
+            melhor_score = score
+            melhor = {
+                "tipo_cadeira": tipo,
+                "perfil_match": perfil["nome"],
+                "completa": len(em_falta) == 0,
+                "contagem": dict(contagem),
+                "pecas_em_falta": em_falta,
+                "pecas_extra": extra,
+            }
+
+    return melhor
+
+
+def render_completude(resultado: dict) -> None:
+    """Renderiza o widget de completude no Streamlit."""
+    if resultado["tipo_cadeira"] is None:
+        st.info(" Nenhum tipo de cadeira detetado na imagem — verificação de completude indisponível.")
+        return
+
+    if resultado["completa"]:
+        st.success(f"**{resultado['perfil_match']}** — Cadeira completa!")
+    else:
+        st.error(f"**{resultado['perfil_match']}** — Cadeira incompleta")
+
+        falta = resultado["pecas_em_falta"]
+        if falta:
+            linhas = "  \n".join(f"• **{peca}**: falta(m) {qtd}" for peca, qtd in falta.items())
+            st.warning(f"**Peças em falta:**  \n{linhas}")
+
+    extra = resultado["pecas_extra"]
+    if extra:
+        linhas = "  \n".join(f"• **{peca}**: +{qtd} a mais" for peca, qtd in extra.items())
+        st.caption(f"Peças acima do esperado:  \n{linhas}")
 
 
 def load_model(nome: str):
@@ -99,6 +225,7 @@ def run_inference(mdl, image, conf: float, device: str, show_labels: bool, show_
         "detections": detections,
         "confs": boxes.conf.tolist(),
         "n_boxes": len(boxes),
+        "completude": verificar_completude(detections),
     }
 
 
@@ -119,6 +246,10 @@ def render_model_col(nome: str, data: dict, *, show_image: bool = True) -> None:
         st.warning("Nenhuma deteção.")
 
     st.metric("Tempo de Inferência", f"{data['tempo_ms']:.1f} ms")
+
+    # ─── Completude ───
+    st.divider()
+    render_completude(data["completude"])
 
 
 st.sidebar.title("Configurações")
@@ -216,6 +347,7 @@ if st.session_state.page == "image":
                     # ─── Exportar JSON (sempre visível) ───
                     export_data = {
                         "threshold_confianca": confianca,
+                        "completude": data["completude"],
                         modelo_ver: {
                             "total_detetado": len(data["detections"]),
                             "detecoes": data["detections"],
@@ -251,6 +383,7 @@ if st.session_state.page == "image":
                             "total": len(data["detections"]),
                             "conf_media": conf_media,
                             "detecoes": data["detections"],
+                            "completude": data["completude"],
                             "fonte": "Imagem Estática",
                         })
         else:
@@ -301,13 +434,18 @@ elif st.session_state.page == "webcam":
             ctx.video_processor.mostrar_labels = mostrar_labels
             ctx.video_processor.mostrar_scores = mostrar_scores
 
-            # ─── Exportar JSON do último frame ───
+            # ─── Completude + Exportar JSON do último frame ───
             st.divider()
             detections = ctx.video_processor.last_detections
+            completude = verificar_completude(detections)
+
+            render_completude(completude)
+
             export_data = {
                 "modelo": modelo_ver,
                 "threshold_confianca": confianca,
                 "total_detetado": len(detections),
+                "completude": completude,
                 "detecoes": detections,
             }
             
@@ -367,8 +505,16 @@ elif st.session_state.page == "compare":
             st.divider()
             export_cmp = {
                 "threshold_confianca": confianca,
-                modelo_a: {"total_detetado": len(data_a["detections"]), "detecoes": data_a["detections"]},
-                modelo_b: {"total_detetado": len(data_b["detections"]), "detecoes": data_b["detections"]},
+                modelo_a: {
+                    "total_detetado": len(data_a["detections"]),
+                    "completude": data_a["completude"],
+                    "detecoes": data_a["detections"],
+                },
+                modelo_b: {
+                    "total_detetado": len(data_b["detections"]),
+                    "completude": data_b["completude"],
+                    "detecoes": data_b["detections"],
+                },
             }
             with st.expander("Pré-visualizar JSON comparativo"):
                 st.json(export_cmp)
@@ -413,6 +559,7 @@ elif st.session_state.page == "compare":
                         "total": len(data["detections"]),
                         "conf_media": sum(data["confs"]) / len(data["confs"]) if data["confs"] else 0.0,
                         "detecoes": data["detections"],
+                        "completude": data["completude"],
                         "fonte": "Comparação",
                     })
         else:
@@ -450,6 +597,17 @@ if st.session_state.page == "historico":
                         f"**Conf. Média:** {entry['conf_media']:.2%}"
                     )
 
+                    # ─── Completude no histórico ───
+                    compl = entry.get("completude")
+                    if compl and compl["tipo_cadeira"]:
+                        if compl["completa"]:
+                            st.success(f"{compl['perfil_match']}")
+                        else:
+                            falta_str = ", ".join(
+                                f"{p} (×{q})" for p, q in compl["pecas_em_falta"].items()
+                            )
+                            st.error(f"{compl['perfil_match']} — falta: {falta_str}")
+
                     if entry["detecoes"]:
                         with st.expander("Ver detalhes"):
                             for i, det in enumerate(entry["detecoes"], 1):
@@ -463,6 +621,7 @@ if st.session_state.page == "historico":
                         "timestamp": entry["timestamp"],
                         "fonte": entry["fonte"],
                         "threshold_confianca": confianca,
+                        "completude": entry.get("completude"),
                         entry["modelo"]: {
                             "total_detetado": entry["total"],
                             "detecoes": entry["detecoes"],
