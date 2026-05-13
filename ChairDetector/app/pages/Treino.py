@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -6,7 +7,7 @@ from pathlib import Path
 from PIL import Image
 
 st.set_page_config(
-    page_title="Dashboard de Treino – IA Chair Detector",
+    page_title="Dashboard de Treino - ChairParts",
     layout="wide",
 )
 
@@ -19,7 +20,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 MODELOS_DIR = BASE_DIR / "modelos"
 
 def discover_models(modelos_dir: Path) -> dict:
-    """Percorre modelos/ e devolve info de cada modelo encontrado."""
     models = {}
     if not modelos_dir.exists():
         return models
@@ -28,10 +28,12 @@ def discover_models(modelos_dir: Path) -> dict:
             continue
         train_dir = model_dir / "train"
         csv_path  = train_dir / "results.csv"
+        eval_path = model_dir / "eval.json"
         models[model_dir.name] = {
             "dir":       model_dir,
             "train_dir": train_dir if train_dir.exists() else None,
             "csv":       csv_path  if csv_path.exists()  else None,
+            "eval":      eval_path if eval_path.exists() else None,
         }
     return models
 
@@ -41,7 +43,6 @@ MODELS = discover_models(MODELOS_DIR)
 COLORS = ["#6378ff", "#ff6b6b", "#00d4aa", "#ffd166", "#a259ff", "#ff79c6"]
 
 def plot_lines(ax, epochs, series: list, title: str, ylabel=""):
-    """Desenha linhas num eixo matplotlib."""
     for i, (label, values) in enumerate(series):
         color = COLORS[i % len(COLORS)]
         ax.plot(epochs, values, label=label, color=color, linewidth=1.5)
@@ -54,7 +55,7 @@ def plot_lines(ax, epochs, series: list, title: str, ylabel=""):
     ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True, nbins=10))
 
 if not MODELS:
-    st.error(f"Nenhum modelo encontrado em `{MODELOS_DIR}`.")
+    st.error(f"Nenhum modelo encontrado em '{MODELOS_DIR}'.")
     st.stop()
 
 # ── Tabs por modelo ────────────────────────────────────────────────────────────
@@ -65,12 +66,42 @@ for tab, (model_name, info) in zip(tabs, MODELS.items()):
     with tab:
         train_dir = info["train_dir"]
         csv_path  = info["csv"]
+        eval_path = info["eval"]
 
         if train_dir is None:
-            st.info(f"Pasta `train/` não encontrada para o modelo **{model_name}**.")
+            st.info(f"Pasta 'train/' não encontrada para o modelo **{model_name}**.")
             continue
 
-        # ── Métricas via CSV ───────────────────────────────────────────────────
+        # ── Métricas Finais via eval.json ──────────────────────────────────────
+        if eval_path:
+            with open(eval_path) as f:
+                eval_data = json.load(f)
+
+            col_val, col_test = st.columns(2)
+
+            for col, split_key, split_label in [
+                (col_val,  "val",  "Validação"),
+                (col_test, "test", "Teste"),
+            ]:
+                d = eval_data.get(split_key, {})
+                with col:
+                    st.subheader(f"Métricas Finais — {split_label}")
+                    m1, m2, m3, m4 = st.columns(4)
+                    m1.metric("mAP50",     f'{d.get("mAP50",     0):.3f}')
+                    m2.metric("mAP50-95",  f'{d.get("mAP50-95",  0):.3f}')
+                    m3.metric("Precision", f'{d.get("precision", 0):.3f}')
+                    m4.metric("Recall",    f'{d.get("recall",    0):.3f}')
+
+                    per_class = d.get("per_class", [])
+                    if per_class:
+                        with st.expander(f"Ver métricas por classe — {split_label}"):
+                            st.dataframe(pd.DataFrame(per_class), hide_index=True)
+        else:
+            st.warning("Ficheiro 'eval.json' não encontrado. Corre 'treino/test.py' para gerar as métricas finais.")
+
+        st.divider()
+
+        # ── Curvas de treino via CSV ───────────────────────────────────────────
         if csv_path:
             df = pd.read_csv(csv_path)
             df.columns = df.columns.str.strip()
@@ -78,19 +109,6 @@ for tab, (model_name, info) in zip(tabs, MODELS.items()):
             if "epoch" in df.columns:
                 df["epoch"] = pd.to_numeric(df["epoch"], errors="coerce")
             epochs = df["epoch"].tolist()
-
-            last = df.iloc[-1]
-            best_row = df.loc[df["metrics/mAP50(B)"].idxmax()]
-
-            st.subheader("Métricas Finais")
-            c1, c2, c3, c4, c5 = st.columns(5)
-            c1.metric("Épocas", int(df["epoch"].max()))
-            c2.metric("mAP50 (Best)", f'{best_row["metrics/mAP50(B)"]:.3f}')
-            c3.metric("mAP50-95", f'{last["metrics/mAP50-95(B)"]:.3f}')
-            c4.metric("Precision", f'{last["metrics/precision(B)"]:.3f}')
-            c5.metric("Recall", f'{last["metrics/recall(B)"]:.3f}')
-
-            st.divider()
 
             st.subheader("Gráficos de Treino")
             
@@ -130,7 +148,7 @@ for tab, (model_name, info) in zip(tabs, MODELS.items()):
 
             st.divider()
         else:
-            st.warning("Ficheiro `results.csv` não encontrado.")
+            st.warning("Ficheiro'results.csv' não encontrado.")
 
         # ── Galeria de imagens ─────────────────────────────────────────────────
         st.subheader("Galeria de Resultados")

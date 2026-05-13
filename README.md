@@ -13,13 +13,13 @@ Esta aplicação demonstra o modelo de IA desenvolvido para a UC de Inteligênci
 
 ### Pré-requisitos
 - Ter o ambiente virtual ativo (passos 1-3 acima)
-- Criar um ficheiro `.env` na raiz do projeto com a tua API key do Roboflow: ROBOFLOW_API_KEY=a_tua_api_key
+- Criar um ficheiro `.env` na pasta `ChairDetector/` com a tua API key do Roboflow: ROBOFLOW_API_KEY=a_tua_api_key
 
 ### 1. Descarregar o dataset
 ```bash
 python treino/download_dataset.py
 ```
-Isto vai descarregar o dataset do Roboflow para a pasta `ChairDetector/IA-8230365-8230196-numero_da_versão/`.
+Isto vai descarregar o dataset do Roboflow (versão 6) para a pasta `ChairDetector/IA-8230365-8230196-6/`.
 
 > **Nota:** Se o dataset for atualizado no Roboflow, alterar o número da versão em `download_dataset.py` e em `yolo_model_train.py`.
 
@@ -27,6 +27,6 @@ Isto vai descarregar o dataset do Roboflow para a pasta `ChairDetector/IA-823036
 ```bash
 python treino/yolo_model_train.py
 ```
-O treino usa YOLOv8m com 100 épocas e resolução 640px (por enquanto). Os resultados são guardados em `runs/modelos/yolov8/v{n}/` — cada versão tem a sua própria pasta (`v1`, `v2`, ...). Para treinar uma nova versão, altera o parâmetro `name` em `yolo_model_train.py`.
+O treino usa YOLOv8m com 150 épocas e resolução 640px. Os resultados são guardados em `runs/train/foe-bot-exp1/`. Para treinar uma nova versão, altera o parâmetro `name` em `yolo_model_train.py`.
 
-> **Nota:** O parâmetro `device='mps'` está otimizado para Mac com Apple Silicon. Em Windows/Linux mudar para `device='cuda'` (GPU NVIDIA) ou `device='cpu'`.
+> **Nota:** O parâmetro `device='cpu'` é o atual. Para usar GPU NVIDIA mudar para `device='cuda'` (ou `device=0`), ou `device='mps'` em Mac com Apple Silicon.

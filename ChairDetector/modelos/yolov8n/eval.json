@@ -1,0 +1,131 @@
+{
+  "model": "yolov8n",
+  "val": {
+    "mAP50": 0.9027,
+    "mAP50-95": 0.5929,
+    "precision": 0.9108,
+    "recall": 0.8264,
+    "per_class": [
+      {
+        "class": "chair armrest",
+        "mAP50": 0.8064,
+        "mAP50-95": 0.493,
+        "precision": 0.8028,
+        "recall": 0.6667
+      },
+      {
+        "class": "chair backrest",
+        "mAP50": 0.8832,
+        "mAP50-95": 0.6693,
+        "precision": 0.9411,
+        "recall": 0.7994
+      },
+      {
+        "class": "chair seat",
+        "mAP50": 0.8347,
+        "mAP50-95": 0.4477,
+        "precision": 0.9224,
+        "recall": 0.7437
+      },
+      {
+        "class": "chair wheel",
+        "mAP50": 0.9298,
+        "mAP50-95": 0.606,
+        "precision": 0.9387,
+        "recall": 0.806
+      },
+      {
+        "class": "dining chair",
+        "mAP50": 0.995,
+        "mAP50-95": 0.737,
+        "precision": 0.8611,
+        "recall": 1.0
+      },
+      {
+        "class": "dining chair leg",
+        "mAP50": 0.9802,
+        "mAP50-95": 0.5299,
+        "precision": 0.9485,
+        "recall": 0.9118
+      },
+      {
+        "class": "office chair",
+        "mAP50": 0.9231,
+        "mAP50-95": 0.7263,
+        "precision": 0.933,
+        "recall": 0.8889
+      },
+      {
+        "class": "office chair leg",
+        "mAP50": 0.8692,
+        "mAP50-95": 0.5338,
+        "precision": 0.9391,
+        "recall": 0.7949
+      }
+    ]
+  },
+  "test": {
+    "mAP50": 0.8601,
+    "mAP50-95": 0.5486,
+    "precision": 0.8687,
+    "recall": 0.8052,
+    "per_class": [
+      {
+        "class": "chair armrest",
+        "mAP50": 0.7675,
+        "mAP50-95": 0.5134,
+        "precision": 1.0,
+        "recall": 0.6378
+      },
+      {
+        "class": "chair backrest",
+        "mAP50": 0.8105,
+        "mAP50-95": 0.5868,
+        "precision": 0.7189,
+        "recall": 0.7317
+      },
+      {
+        "class": "chair seat",
+        "mAP50": 0.8859,
+        "mAP50-95": 0.5797,
+        "precision": 0.8666,
+        "recall": 0.8182
+      },
+      {
+        "class": "chair wheel",
+        "mAP50": 0.9417,
+        "mAP50-95": 0.5642,
+        "precision": 0.8443,
+        "recall": 0.9444
+      },
+      {
+        "class": "dining chair",
+        "mAP50": 0.8141,
+        "mAP50-95": 0.5011,
+        "precision": 1.0,
+        "recall": 0.7765
+      },
+      {
+        "class": "dining chair leg",
+        "mAP50": 0.8077,
+        "mAP50-95": 0.3891,
+        "precision": 0.8384,
+        "recall": 0.7
+      },
+      {
+        "class": "office chair",
+        "mAP50": 0.995,
+        "mAP50-95": 0.671,
+        "precision": 0.8184,
+        "recall": 1.0
+      },
+      {
+        "class": "office chair leg",
+        "mAP50": 0.8581,
+        "mAP50-95": 0.5836,
+        "precision": 0.8625,
+        "recall": 0.8333
+      }
+    ]
+  }
+}

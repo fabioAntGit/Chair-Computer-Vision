@@ -25,7 +25,7 @@ AVAILABLE_DEVICES = ["cpu"]
 if torch.cuda.is_available(): AVAILABLE_DEVICES.append("cuda")
 if torch.backends.mps.is_available(): AVAILABLE_DEVICES.append("mps")
 
-st.set_page_config(page_title="IA Chair Detector", layout="wide")
+st.set_page_config(page_title="ChairParts", layout="wide")
 
 
 MODELS_DIR = Path("modelos")
@@ -89,19 +89,6 @@ CHAIR_PROFILES: dict[str, list[dict]] = {
 
 
 def verificar_completude(detections: list[dict]) -> dict:
-    """
-    Analisa as deteções e devolve o estado de completude da cadeira.
-
-    Retorna:
-        {
-            "tipo_cadeira": str | None,
-            "perfil_match": str | None,
-            "completa": bool,
-            "contagem": dict[str, int],
-            "pecas_em_falta": dict[str, int],   # peça → quantas faltam
-            "pecas_extra": dict[str, int],       # peça → quantas a mais
-        }
-    """
     contagem = Counter(d["classe"] for d in detections)
 
     # Determinar tipo de cadeira detetada
@@ -125,7 +112,7 @@ def verificar_completude(detections: list[dict]) -> dict:
 
     # Testar cada perfil e escolher o melhor match
     melhor = None
-    melhor_score = -1  # quanto maior, melhor (menos faltas)
+    melhor_score = float("-inf")
 
     for perfil in perfis:
         reqs = perfil["requisitos"]
@@ -156,15 +143,14 @@ def verificar_completude(detections: list[dict]) -> dict:
 
 
 def render_completude(resultado: dict) -> None:
-    """Renderiza o widget de completude no Streamlit."""
     if resultado["tipo_cadeira"] is None:
-        st.info(" Nenhum tipo de cadeira detetado na imagem — verificação de completude indisponível.")
+        st.info(" Nenhum tipo de cadeira detetado na imagem - verificação de completude indisponível.")
         return
 
     if resultado["completa"]:
-        st.success(f"**{resultado['perfil_match']}** — Cadeira completa!")
+        st.success(f"**{resultado['perfil_match']}** - Cadeira completa!")
     else:
-        st.error(f"**{resultado['perfil_match']}** — Cadeira incompleta")
+        st.error(f"**{resultado['perfil_match']}** - Cadeira incompleta")
 
         falta = resultado["pecas_em_falta"]
         if falta:
@@ -182,14 +168,14 @@ def load_model(nome: str):
     if key not in st.session_state or st.session_state[key] is None:
         path = ALL_MODEL_PATHS.get(nome)
         if path is None:
-            st.error(f"Modelo `{nome}` não encontrado no diretório de modelos.")
+            st.error(f"Modelo '{nome}' não encontrado no diretório de modelos.")
             return None
-        with st.spinner(f"A carregar modelo `{nome}`..."):
+        with st.spinner(f"A carregar modelo '{nome}'..."):
             try:
                 st.session_state[key] = YOLO(path)
             except Exception:
                 st.session_state[key] = None
-                st.error(f"Erro ao carregar o modelo `{nome}`.")
+                st.error(f"Erro ao carregar o modelo '{nome}'.")
     return st.session_state[key]
 
 
@@ -256,7 +242,7 @@ st.sidebar.title("Configurações")
 
 st.sidebar.markdown("### Seleção do Modelo")
 if not AVAILABLE_MODELS:
-    st.sidebar.error("Nenhum modelo .pt encontrado em `modelos/*/weights/best.pt`.")
+    st.sidebar.error("Nenhum modelo .pt encontrado em 'modelos/*/weights/best.pt'.")
     st.stop()
 
 modelo_ver = st.sidebar.selectbox("Escolha o Modelo", options=AVAILABLE_MODELS, index=0,
@@ -454,7 +440,7 @@ elif st.session_state.page == "webcam":
 
             col_info, col_btn = st.columns([2, 1])
             with col_info:
-                st.caption(f"📸 Último frame: **{len(detections)}** deteção(ões) capturada(s)")
+                st.caption(f"Último frame: **{len(detections)}** deteção(ões) capturada(s)")
             with col_btn:
                 st.download_button(
                     label="Exportar JSON",
