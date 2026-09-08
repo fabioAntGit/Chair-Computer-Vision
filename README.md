@@ -1,4 +1,4 @@
-# IA_CHAIR_DETECTOR
+# Chair Computer Vision
 # Interface de Deteção Industrial
 Esta aplicação demonstra o modelo de IA desenvolvido para a UC de Inteligência Artificial.
 
